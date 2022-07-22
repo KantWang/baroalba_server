@@ -1,7 +1,7 @@
-const express = require("express");
-const cors = require("cors");
-const bodyParser = require("body-parser");
-const mysql = require("mysql2/promise");
+const express = require('express');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const mysql = require('mysql2/promise');
 const path = require('path');
 const nodeGeocoder = require('node-geocoder');
 const app = express();
@@ -15,9 +15,6 @@ const ownerRouter = require('./routes/owner');
 const reserveRouter = require('./routes/reserve');
 const applyRouter = require('./routes/apply');
 
-
-
-
 /****************************************/
 
 /* console.log depth에 필요 */
@@ -26,31 +23,17 @@ let util = require('util');
 
 /* 구글 map api */
 const options = {
-  provider: 'google',
-  apiKey: 'AIzaSyAHZxHAkDSHoI-lJDCg5YfO7bLCFiRBpaU' // 요놈 넣어만 주면 될듯?
+    provider: 'google',
+    apiKey: 'AIzaSyAHZxHAkDSHoI-lJDCg5YfO7bLCFiRBpaU', // 요놈 넣어만 주면 될듯?
 };
 const geocoder = nodeGeocoder(options);
 
 const pool = require('./routes/function');
 
-
-// const con = mysql.createConnection({
-//   host: "localhost",
-//   user: "root",
-//   password: "Rhd93!@#$~",
-//   database: "gig_time",
-// });
-
-// con.connect(async function (err) {
-//   if(err) throw err;
-//   console.log('Connected!');
-// });
-
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cors());
 app.use(bodyParser.json());
 /****** webrtc - interview ******/
-const SOCK_PORT = process.env.PORT || 8080;
 let http = require('http');
 let server = http.createServer(app);
 let socketio = require('socket.io');
@@ -124,10 +107,6 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(SOCK_PORT, () => {
-    console.log(`socket server running on ${SOCK_PORT}`);
-});
-
 app.post('/interview', (req, res, next) => {
     const interviewId = req.body['interviewId'];
     for (const roomName of Object.values(socketToRoom)) {
@@ -139,7 +118,6 @@ app.post('/interview', (req, res, next) => {
     return res.send({ enter: false });
 });
 
-
 app.use('/check', checkRouter);
 app.use('/worker', workerRouter);
 app.use('/store', storeerRouter);
@@ -147,7 +125,6 @@ app.use('/owner', ownerRouter);
 app.use('/reserve', reserveRouter);
 app.use('/apply', applyRouter);
 
-
-app.listen(PORT, () => {
-    console.log(`Server On : http://localhost:${PORT}/`);
+server.listen(PORT, () => {
+    console.log(`socket server running on ${SOCK_PORT}`);
 });
