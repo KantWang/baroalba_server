@@ -1,8 +1,6 @@
 const { Router } = require('express');
 const idRouter = Router();
-const mysql = require("mysql2/promise");
-
-const pool = require('../function');
+const pool = require('../../util/function');
 
 /* worker의 email을 받아서 id를 return */
 /*

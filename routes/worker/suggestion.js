@@ -2,7 +2,8 @@ const { Router } = require('express');
 const suggestionRouter = Router();
 const mysql = require("mysql2/promise");
 
-const pool = require('../function');
+const pool = require('../../util/function');
+const getDist = require('../../util/getDist');
 
 
 /* 최적의 알바 추천 */
@@ -41,6 +42,7 @@ suggestionRouter.post('/', async (req, res) => {
       console.log(new_times);
       const type_sql = `select job_id from jobs where type = '${req.body['type']}';`;
       const [type_result] = await con.query(type_sql);
+      console.log('aaa', type_result)
   
       const sql = `SELECT hourlyorders_id, name, start_time, min_price, latitude, longitude FROM hourly_orders A 
                       INNER JOIN orders B ON A.FK_hourlyorders_orders = B.order_id
@@ -51,20 +53,32 @@ suggestionRouter.post('/', async (req, res) => {
                       AND B.FK_orders_stores IN
                       (SELECT store_id FROM stores WHERE store_id IN 
                         (SELECT FK_qualifications_stores FROM qualifications 
-                          WHERE FK_qualifications_workers=?));   `;
+                          WHERE FK_qualifications_workers=?));`;
+      console.log(date, new_times, type_result[0]['job_id'], req.body['min_price'], req.body['worker_id'])
       const [result] = await con.query(sql, [date, new_times, type_result[0]['job_id'], req.body['min_price'], req.body['worker_id']]);
-        // console.log('모든 개수: ' + result.length);
+        console.log('모든 개수: ' + result.length);
       let value = await suggestion(req.body['worker_id'], result, new_times);
-      if(value === -1){
+      // if(value === -1){
+      //   con.release();
+      //   res.send('error-worker/suggestion');              
+      // }
+      // console.log('value: ', value);
+      // console.log('value: ', value['price']);
+      // console.log('value: ', typeof value['price']);
+      // console.log('value: ', value['visit']);
+      // console.log('value: ', value['visit'].length);
+      if(value['price'].length<1){
+        console.log('notFound');
+        con.release();                                   
+        res.send('notFound');
+      }{
         con.release();
-        res.send('error-worker/suggestion');              
+        res.send(value);      
       }
-      con.release();
-      res.send(value);      
     }
     catch{
       con.release();
-      res.send('error-worker/suggestion');
+      res.send('error');
     }
   })
 
@@ -88,14 +102,14 @@ suggestionRouter.post('/', async (req, res) => {
     for (i of orders){
       tmp += `update hourly_orders SET FK_hourlyorders_workers=${req.body['worker_id']}, closing_time='${day}', status=1 WHERE hourlyorders_id=${i}; `
     }
-    console.log(tmp)
+    // console.log(tmp)
     const [result] = await con.query(tmp);
     con.release();
     res.send('success');    
   }
   catch{
     con.release();
-    res.send('error-worker/suggestion/submit');
+    res.send('error');
   }
 
 })
@@ -123,7 +137,7 @@ async function suggestion(worker_id, hourly_orders, start_times)
       /* 우선, range 이내의 hourly_order를 가져오자. */
       let hourly_orders_sliced = getInnerRange(latitude, longitude, range, hourly_orders);
       // console.log('총 개수: ' + hourly_orders_sliced.length);
-      // console.log(hourly_orders_sliced);
+      console.log(hourly_orders_sliced);
   
       /* 이제 들어온 시간 별로 나눠야 한다. */
       let hourly_orders_divided_by_start_time = {};
@@ -170,7 +184,7 @@ async function suggestion(worker_id, hourly_orders, start_times)
       let key = new Date(start_times[0]);
       for (let i = 0; i < hourly_orders_divided_by_start_time[key].length; i++) {
           let short = hourly_orders_divided_by_start_time[key][i];
-          let move_first = getDistance(latitude, 
+          let move_first = getDist.getDistance(latitude, 
                                       longitude, 
                                       hourly_orders_sliced[short['idx']]['latitude'],
                                       hourly_orders_sliced[short['idx']]['longitude']);
@@ -240,7 +254,7 @@ async function suggestion(worker_id, hourly_orders, start_times)
           let next_longitude = hourly_orders_sliced[short['idx']]['longitude'];
           let next_visit = Object.assign(Array(), visit);
           /* 거리를 계산하자 */
-          let move = getDistance(latitude, 
+          let move = getDist.getDistance(latitude, 
                                   longitude,
                                   next_latitude,
                                   next_longitude);
@@ -285,7 +299,9 @@ async function suggestion(worker_id, hourly_orders, start_times)
           let card = {
             "id" : hourly_orders_sliced[idx]['hourlyorders_id'],
             "time" : start_times[i].slice(-8, -3),
-            "store" : hourly_orders_sliced[idx]['name']
+            "store" : hourly_orders_sliced[idx]['name'],
+            "lat" : hourly_orders_sliced[idx]['latitude'],
+            "lng" : hourly_orders_sliced[idx]['longitude']
           }
           cards.push(card)
           console.log('   ' + start_times[i] + ' -- ' + hourly_orders_sliced[idx]['name'] + ' -- ' + hourly_orders_sliced[idx]['hourlyorders_id']);
@@ -302,7 +318,7 @@ async function suggestion(worker_id, hourly_orders, start_times)
         "visit" : cards
       }
   
-      console.log(respon);
+      console.log("respon: ",respon);
       con.release();
   
       return respon;
@@ -310,33 +326,33 @@ async function suggestion(worker_id, hourly_orders, start_times)
     catch{
       con.release();
   
-      return -1;
+      return 'error-worker/suggestion';
     }
 }
 
 
-/* 두 개의 좌표 간 거리 구하기 */
-function getDistance(lat1, lon1, lat2, lon2) {
-    if ((lat1 == lat2) && (lon1 == lon2)) return 0;
+// /* 두 개의 좌표 간 거리 구하기 */
+// function getDistance(lat1, lon1, lat2, lon2) {
+//     if ((lat1 == lat2) && (lon1 == lon2)) return 0;
   
-    let radLat1 = Math.PI * lat1 / 180;
-    let radLat2 = Math.PI * lat2 / 180;
+//     let radLat1 = Math.PI * lat1 / 180;
+//     let radLat2 = Math.PI * lat2 / 180;
   
-    let theta = lon1 - lon2;
-    let radTheta = Math.PI * theta / 180;
-    let dist = Math.sin(radLat1) * Math.sin(radLat2) + Math.cos(radLat1) * Math.cos(radLat2) * Math.cos(radTheta);
+//     let theta = lon1 - lon2;
+//     let radTheta = Math.PI * theta / 180;
+//     let dist = Math.sin(radLat1) * Math.sin(radLat2) + Math.cos(radLat1) * Math.cos(radLat2) * Math.cos(radTheta);
   
-    if (dist > 1) dist = 1;
+//     if (dist > 1) dist = 1;
     
-    dist = Math.acos(dist);
-    dist = dist * 180 / Math.PI;
-    dist = dist * 60 * 1.1515 * 1.609344 * 1000;
+//     dist = Math.acos(dist);
+//     dist = dist * 180 / Math.PI;
+//     dist = dist * 60 * 1.1515 * 1.609344 * 1000;
   
-    if (dist < 100) dist = Math.round(dist / 10) * 10;
-    else dist = Math.round(dist / 100) * 100;
+//     if (dist < 100) dist = Math.round(dist / 10) * 10;
+//     else dist = Math.round(dist / 100) * 100;
     
-    return dist;
-}
+//     return dist;
+// }
 
 
 /* 현재위치에서 range 이내인 info 원소만 뽑아서 return */
@@ -348,7 +364,7 @@ function getInnerRange(latitude, longitude, range, info) {
     /* 이렇게 짜면 너무 너무 비효율적이다 */
     /* db 구조를 바꿔야 하나? 아니면, 탐색 방식을 개선? */
     for (let i = 0; i < n; i++) {
-        tmp = getDistance(latitude, longitude, info[i]['latitude'], info[i]['longitude']);
+        tmp = getDist.getDistance(latitude, longitude, info[i]['latitude'], info[i]['longitude']);
         if (tmp <= range) {
             answer.push(info[i]);
         }
